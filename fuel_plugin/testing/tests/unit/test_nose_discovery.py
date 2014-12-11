@@ -130,3 +130,6 @@ class TestNoseDiscovery(unittest2.TestCase):
             needed_test.deployment_tags,
             expected['test']['deployment_tags']
         )
+
+    def test_group_test_into_testsets(self):
+        pass

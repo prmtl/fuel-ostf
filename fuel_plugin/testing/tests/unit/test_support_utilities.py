@@ -12,10 +12,37 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+# TODO(prmtl): use unittest2
 import unittest
+
+import requests_mock
 
 from fuel_plugin.ostf_adapter import config
 from fuel_plugin.ostf_adapter import mixins
+
+
+CLUSTER = {
+    'cluster_meta': {
+        'release_id': 3,
+        'mode': 'ha'
+    },
+    'release_data': {
+        'operating_system': 'rhel'
+    },
+    'cluster_attributes': {
+        'editable': {
+            'additional_components': {
+                'murano': {
+                    'value': True
+                },
+                'sahara': {
+                    'value': False
+                }
+            },
+            'common': {}
+        }
+    }
+}
 
 
 class TestDeplTagsGetter(unittest.TestCase):
@@ -32,6 +59,13 @@ class TestDeplTagsGetter(unittest.TestCase):
             )
         }
 
-        res = mixins._get_cluster_depl_tags(expected['cluster_id'])
+        with requests_mock.Mocker() as m:
+            m.register_uri('GET', '/api/clusters/3',
+                           json=CLUSTER['cluster_meta'])
+            m.register_uri('GET', '/api/clusters/3/attributes',
+                           json=CLUSTER['cluster_attributes'])
+            m.register_uri('GET', '/api/releases/3',
+                           json=CLUSTER['release_data'])
+            res = mixins._get_cluster_depl_tags(expected['cluster_id'])
 
         self.assertEqual(res, expected['depl_tags'])

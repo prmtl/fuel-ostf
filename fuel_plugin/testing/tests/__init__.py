@@ -12,44 +12,44 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import signal
-import subprocess
-import time
-
-processes_pool = None
-
-
-def setup():
-    global processes_pool
-
-    with open('/dev/null', 'w') as devnull:
-        processes_pool = tuple(
-            [
-                subprocess.Popen(
-                    [
-                        'python',
-                        'fuel_plugin/testing/test_utils/nailgun_mimic.py'
-                    ],
-                    stdout=devnull,
-                    stderr=devnull
-                ),
-                subprocess.Popen(
-                    [
-                        'ostf-server',
-                        '--debug',
-                        ('--debug_tests=fuel_plugin/testing/'
-                         'fixture/dummy_tests')
-                    ],
-                    stdout=devnull,
-                    stderr=devnull
-                )
-            ]
-        )
-
-    time.sleep(5)
-
-
-def teardown():
-    for process in processes_pool:
-        process.send_signal(signal.SIGINT)
-        process.wait()
+# import signal
+# import subprocess
+# import time
+#
+# processes_pool = None
+#
+#
+# def setup():
+#     global processes_pool
+#
+#     with open('/dev/null', 'w') as devnull:
+#         processes_pool = tuple(
+#             [
+#                 subprocess.Popen(
+#                     [
+#                         'python',
+#                         'fuel_plugin/testing/test_utils/nailgun_mimic.py'
+#                     ],
+#                     stdout=devnull,
+#                     stderr=devnull
+#                 ),
+#                 subprocess.Popen(
+#                     [
+#                         'ostf-server',
+#                         '--debug',
+#                         ('--debug_tests=fuel_plugin/testing/'
+#                          'fixture/dummy_tests')
+#                     ],
+#                     stdout=devnull,
+#                     stderr=devnull
+#                 )
+#             ]
+#         )
+#
+#     time.sleep(5)
+#
+#
+# def teardown():
+#     for process in processes_pool:
+#         process.send_signal(signal.SIGINT)
+#         process.wait()

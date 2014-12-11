@@ -20,23 +20,16 @@ from fuel_plugin.ostf_adapter.wsgi import app
 from fuel_plugin.testing.tests.unit import base
 
 
-class WsgiInterfaceTests(base.BaseWSGITest):
-
-    @classmethod
-    def setUpClass(cls):
-        super(WsgiInterfaceTests, cls).setUpClass()
+class WsgiInterfaceTest(base.BaseWSGITest):
 
     def setUp(self):
-        super(WsgiInterfaceTests, self).setUp()
+        super(WsgiInterfaceTest, self).setUp()
 
         self.app = TestApp(app.setup_app())
 
         self.fixture = {
             'cluster_id': 1
         }
-
-    def tearDown(self):
-        super(WsgiInterfaceTests, self).tearDown()
 
     def test_get_all_tests(self):
         self.app.get('/v1/tests/{0}'
