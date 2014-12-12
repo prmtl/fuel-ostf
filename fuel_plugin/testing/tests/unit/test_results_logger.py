@@ -15,13 +15,13 @@
 #    under the License.
 
 import mock
-from unittest2 import TestCase
 
 from fuel_plugin.ostf_adapter.logger import ResultsLogger
+from fuel_plugin.testing.tests import base
 
 
 @mock.patch.object(ResultsLogger, '_init_file_logger')
-class TestResultsLogger(TestCase):
+class TestResultsLogger(base.BaseUnitTest):
 
     def get_logger(self, **kwargs):
         options = {

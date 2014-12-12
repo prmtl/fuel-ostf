@@ -26,6 +26,10 @@ from fuel_plugin.ostf_adapter import mixins
 TEST_PATH = 'fuel_plugin/testing/fixture/dummy_tests'
 
 
+class BaseUnitTest(unittest2.TestCase):
+    """Base class for all unit tests"""
+
+
 class BaseWSGITest(unittest2.TestCase):
 
     @classmethod

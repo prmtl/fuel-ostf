@@ -12,13 +12,11 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-# TODO(prmtl): use unittest2
-import unittest
-
 import requests_mock
 
 from fuel_plugin.ostf_adapter import config
 from fuel_plugin.ostf_adapter import mixins
+from fuel_plugin.testing.tests import base
 
 
 CLUSTER = {
@@ -45,7 +43,7 @@ CLUSTER = {
 }
 
 
-class TestDeplTagsGetter(unittest.TestCase):
+class TestDeplTagsGetter(base.BaseUnitTest):
 
     def setUp(self):
         config.init_config([])
