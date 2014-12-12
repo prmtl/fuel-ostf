@@ -19,30 +19,6 @@ from fuel_plugin.ostf_adapter import mixins
 from fuel_plugin.testing.tests import base
 
 
-CLUSTER = {
-    'cluster_meta': {
-        'release_id': 3,
-        'mode': 'ha'
-    },
-    'release_data': {
-        'operating_system': 'rhel'
-    },
-    'cluster_attributes': {
-        'editable': {
-            'additional_components': {
-                'murano': {
-                    'value': True
-                },
-                'sahara': {
-                    'value': False
-                }
-            },
-            'common': {}
-        }
-    }
-}
-
-
 class TestDeplTagsGetter(base.BaseUnitTest):
 
     def setUp(self):
@@ -58,12 +34,13 @@ class TestDeplTagsGetter(base.BaseUnitTest):
         }
 
         with requests_mock.Mocker() as m:
+            cluster = base.CLUSTERS[expected['cluster_id']]
             m.register_uri('GET', '/api/clusters/3',
-                           json=CLUSTER['cluster_meta'])
+                           json=cluster['cluster_meta'])
             m.register_uri('GET', '/api/clusters/3/attributes',
-                           json=CLUSTER['cluster_attributes'])
+                           json=cluster['cluster_attributes'])
             m.register_uri('GET', '/api/releases/3',
-                           json=CLUSTER['release_data'])
+                           json=cluster['release_data'])
             res = mixins._get_cluster_depl_tags(expected['cluster_id'])
 
         self.assertEqual(res, expected['depl_tags'])

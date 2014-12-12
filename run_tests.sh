@@ -24,6 +24,8 @@ function usage {
   echo "  -P, --no-flake8       Don't run FLAKE8 checks"
   echo "  -u, --unit            Run unit tests"
   echo "  -U, --no-unit         Don't run unit tests"
+  echo "  -i, --integration     Run integarion tests"
+  echo "  -I, --no-integration  Don't run inteagration tests"
   echo "  -t, --tests           Run a given test files"
   echo "  -h, --help            Print this usage message"
   echo ""
@@ -40,6 +42,8 @@ function process_options {
       -P|--no-flake8) no_flake8_checks=1;;
       -u|--unit) unit_tests=1;;
       -U|--no-unit) no_unit_tests=1;;
+      -i|--integration) integration_tests=1;;
+      -I|--no-integration) no_integration_tests=1;;
       -t|--tests) certain_tests=1;;
       -*) testropts="$testropts $arg";;
       *) testrargs="$testrargs $arg"
@@ -56,6 +60,7 @@ testropts="--with-timer --timer-warning=10 --timer-ok=2 --timer-top-n=10"
 
 # customizable options
 UNIT_XUNIT=${UNIT_XUNIT:-"$ROOT/unittests.xml"}
+INTEGRATION_XUNIT=${INTEGRATION_XUNIT:-"$ROOT/integration.xml"}
 
 # disabled/enabled flags that are setted from the cli.
 # used for manipulating run logic.
@@ -63,6 +68,8 @@ flake8_checks=0
 no_flake8_checks=0
 unit_tests=0
 no_unit_tests=0
+integration_tests=0
+no_integration_tests=0
 certain_tests=0
 
 
@@ -84,10 +91,12 @@ function run_tests {
 
   # Enable all tests if none was specified skipping all explicitly disabled tests.
   if [[ $flake8_checks -eq 0 && \
+      $integration_tests -eq 0 && \
       $unit_tests -eq 0 ]]; then
 
     if [ $no_flake8_checks -ne 1 ];  then flake8_checks=1;  fi
     if [ $no_unit_tests -ne 1 ];  then unit_tests=1;  fi
+    if [ $no_integration_tests -ne 1 ]; then integration_tests=1; fi
   fi
 
   # Run all enabled tests
@@ -99,6 +108,10 @@ function run_tests {
     run_unit_tests || errors+=" unit_tests"
   fi
 
+  if [ $integration_tests -eq 1 ]; then
+    run_integration_tests || errors+=" integration_tests"
+  fi
+
   # print failed tests
   if [ -n "$errors" ]; then
     echo Failed tests: $errors
@@ -107,6 +120,18 @@ function run_tests {
 
   exit
 }
+
+
+function guess_test_run {
+  if [[ $1 == *integration* ]]; then
+    run_integration_tests $1 || echo "ERROR: $1"
+  elif [[ $1 == *functional* ]]; then
+    run_functional_tests $1 || echo "ERROR: $1"
+  else
+    run_unit_tests $1 || echo "ERROR: $1"
+  fi
+}
+
 
 # Remove temporary files. No need to run manually, since it's
 # called automatically in `run_tests` function.
@@ -132,6 +157,28 @@ function run_unit_tests {
   local TESTS="$ROOT/fuel_plugin/testing/tests/unit"
   local options="-vv $testropts --xunit-file $UNIT_XUNIT"
   local result=0
+
+  if [ $# -ne 0 ]; then
+    TESTS=$@
+  fi
+
+  # run tests
+  tox -epy26 -- $options $TESTS  || result=1
+
+  return $result
+}
+
+
+function run_integration_tests {
+  echo "Starting integration tests"
+
+  local TESTS="$ROOT/fuel_plugin/testing/tests/integration"
+  local options="-vv $testropts --xunit-file $INTEGRATION_XUNIT"
+  local result=0
+
+  if [ $# -ne 0 ]; then
+    TESTS=$@
+  fi
 
   # run tests
   tox -epy26 -- $options $TESTS  || result=1

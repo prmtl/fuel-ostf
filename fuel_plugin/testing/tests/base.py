@@ -13,31 +13,174 @@
 #    under the License.
 
 
-import unittest2
-from mock import patch, MagicMock
+import mock
+import requests_mock
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+import unittest2
 
 from fuel_plugin.ostf_adapter import config
 from fuel_plugin.ostf_adapter.nose_plugin.nose_discovery import discovery
 from fuel_plugin.ostf_adapter.storage import models
 from fuel_plugin.ostf_adapter import mixins
 
+
 TEST_PATH = 'fuel_plugin/testing/fixture/dummy_tests'
+
+
+CLUSTERS = {
+    1: {
+        'cluster_meta': {
+            'release_id': 1,
+            'mode': 'ha'
+        },
+        'release_data': {
+            'operating_system': 'rhel'
+        },
+        'cluster_attributes': {
+            'editable': {
+                'additional_components': {},
+                'common': {}
+            }
+        }
+    },
+    2: {
+        'cluster_meta': {
+            'release_id': 2,
+            'mode': 'multinode',
+        },
+        'release_data': {
+            'operating_system': 'ubuntu'
+        },
+        'cluster_attributes': {
+            'editable': {
+                'additional_components': {},
+                'common': {}
+            }
+        }
+    },
+    3: {
+        'cluster_meta': {
+            'release_id': 3,
+            'mode': 'ha'
+        },
+        'release_data': {
+            'operating_system': 'rhel'
+        },
+        'cluster_attributes': {
+            'editable': {
+                'additional_components': {
+                    'murano': {
+                        'value': True
+                    },
+                    'sahara': {
+                        'value': False
+                    }
+                },
+                'common': {}
+            }
+        }
+    },
+    4: {
+        'cluster_meta': {
+            'release_id': 4,
+            'mode': 'test_error'
+        },
+        'release_data': {
+            'operating_system': 'none'
+        },
+        'cluster_attributes': {
+            'editable': {
+                'additional_components': {},
+                'common': {}
+            }
+        }
+    },
+    5: {
+        'cluster_meta': {
+            'release_id': 5,
+            'mode': 'dependent_tests'
+        },
+        'release_data': {
+            'operating_system': 'none'
+        },
+        'cluster_attributes': {
+            'editable': {
+                'additional_components': {},
+                'common': {}
+            }
+        }
+    }
+}
 
 
 class BaseUnitTest(unittest2.TestCase):
     """Base class for all unit tests"""
 
 
-class BaseWSGITest(unittest2.TestCase):
+class BaseIntegrationTest(BaseUnitTest):
+    """Base class for all integration tests"""
 
     @classmethod
     def setUpClass(cls):
+        # db connection
+        # TODO(prmtl): get from config so it will be dynamic
         cls.dbpath = 'postgresql+psycopg2://ostf:ostf@localhost/ostf'
         cls.Session = sessionmaker()
         cls.engine = create_engine(cls.dbpath)
 
+        # mock http requests
+        cls.requests_mock = requests_mock.Mocker()
+        cls.requests_mock.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        # stop https requests mocking
+        cls.requests_mock.stop()
+
+    def setUp(self):
+        # orm session wrapping
+        config.init_config([])
+        self.connection = self.engine.connect()
+        self.trans = self.connection.begin()
+
+        self.Session.configure(
+            bind=self.connection
+        )
+        self.session = self.Session()
+
+    def tearDown(self):
+        # rollback changes to database
+        # made by tests
+        self.trans.rollback()
+        self.session.close()
+        self.connection.close()
+
+    def mock_api_for_cluster(self, cluster_id):
+        cluster = CLUSTERS[cluster_id]
+        release_id = cluster['cluster_meta']['release_id']
+
+        self.requests_mock.register_uri(
+            'GET',
+            '/api/clusters/{0}'.format(cluster_id),
+            json=cluster['cluster_meta'])
+
+        self.requests_mock.register_uri(
+            'GET',
+            '/api/releases/{0}'.format(release_id),
+            json=cluster['release_data'])
+
+        self.requests_mock.register_uri(
+            'GET',
+            '/api/clusters/{0}/attributes'.format(cluster_id),
+            json=cluster['cluster_attributes'])
+
+
+class BaseWSGITest(BaseIntegrationTest):
+
+    @classmethod
+    def setUpClass(cls):
+        super(BaseWSGITest, cls).setUpClass()
         cls.ext_id = 'fuel_plugin.testing.fixture.dummy_tests.'
         cls.expected = {
             'cluster': {
@@ -69,16 +212,7 @@ class BaseWSGITest(unittest2.TestCase):
         }
 
     def setUp(self):
-        # orm session wrapping
-        config.init_config([])
-        self.connection = self.engine.connect()
-        self.trans = self.connection.begin()
-
-        self.Session.configure(
-            bind=self.connection
-        )
-        self.session = self.Session()
-
+        super(BaseWSGITest, self).setUp()
         test_sets = self.session.query(models.TestSet).all()
 
         # need this if start unit tests in conjuction with integration
@@ -89,9 +223,9 @@ class BaseWSGITest(unittest2.TestCase):
 
         # mocking
         # request mocking
-        self.request_mock = MagicMock()
+        self.request_mock = mock.MagicMock()
 
-        self.request_patcher = patch(
+        self.request_patcher = mock.patch(
             'fuel_plugin.ostf_adapter.wsgi.controllers.request',
             self.request_mock
         )
@@ -101,15 +235,12 @@ class BaseWSGITest(unittest2.TestCase):
         self.request_mock.session = self.session
 
     def tearDown(self):
-        # rollback changes to database
-        # made by tests
-        self.trans.rollback()
-        self.session.close()
-        self.connection.close()
+        super(BaseWSGITest, self).tearDown()
 
         # end of test_case patching
         self.request_patcher.stop()
 
+        # clear "cache"
         mixins.TEST_REPOSITORY = []
 
     @property
