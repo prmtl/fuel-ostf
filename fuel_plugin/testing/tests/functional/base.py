@@ -86,6 +86,7 @@ class SubsetException(Exception):
 
 
 class BaseAdapterTest(TestCase):
+
     def compare(self, response, comparable):
         if response.is_empty:
             msg = '{0} is empty'.format(response.request)

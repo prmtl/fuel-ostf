@@ -203,3 +203,6 @@ class TestingAdapterClient(object):
     def restart_with_timeout(self, testset, tests, cluster_id, timeout):
         action = lambda: self.restart_tests_last(testset, tests, cluster_id)
         return self._with_timeout(action, testset, cluster_id, timeout)
+
+
+OSTFClient = TestingAdapterClient

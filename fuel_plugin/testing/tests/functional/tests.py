@@ -18,7 +18,6 @@ from sqlalchemy import create_engine
 
 from fuel_plugin.testing.tests.functional.base import \
     BaseAdapterTest, Response
-from fuel_plugin.ostf_client.client import TestingAdapterClient as adapter
 
 
 class AdapterTests(BaseAdapterTest):
@@ -74,6 +73,7 @@ class AdapterTests(BaseAdapterTest):
             ]
         }
 
+        from fuel_plugin.ostf_client.client import OSTFClient as adapter
         cls.adapter = adapter(url)
         cls.client = cls.init_client(url)
 

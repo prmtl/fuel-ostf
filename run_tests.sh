@@ -26,6 +26,8 @@ function usage {
   echo "  -U, --no-unit         Don't run unit tests"
   echo "  -i, --integration     Run integarion tests"
   echo "  -I, --no-integration  Don't run inteagration tests"
+  echo "  -f, --functional      Run functional tests"
+  echo "  -F, --no-functional   Don't run functional tests"
   echo "  -t, --tests           Run a given test files"
   echo "  -h, --help            Print this usage message"
   echo ""
@@ -44,6 +46,8 @@ function process_options {
       -U|--no-unit) no_unit_tests=1;;
       -i|--integration) integration_tests=1;;
       -I|--no-integration) no_integration_tests=1;;
+      -f|--functional) functional_tests=1;;
+      -F|--no-functional) no_functional_tests=1;;
       -t|--tests) certain_tests=1;;
       -*) testropts="$testropts $arg";;
       *) testrargs="$testrargs $arg"
@@ -59,8 +63,12 @@ testrargs=
 testropts="--with-timer --timer-warning=10 --timer-ok=2 --timer-top-n=10"
 
 # customizable options
-UNIT_XUNIT=${UNIT_XUNIT:-"$ROOT/unittests.xml"}
+ARTIFACTS=${ARTIFACTS:-`pwd`/test_run}
 INTEGRATION_XUNIT=${INTEGRATION_XUNIT:-"$ROOT/integration.xml"}
+OSTF_SERVER_WAIT_TIME=10
+UNIT_XUNIT=${UNIT_XUNIT:-"$ROOT/unittests.xml"}
+
+mkdir -p $ARTIFACTS
 
 # disabled/enabled flags that are setted from the cli.
 # used for manipulating run logic.
@@ -70,6 +78,8 @@ unit_tests=0
 no_unit_tests=0
 integration_tests=0
 no_integration_tests=0
+functional_tests=0
+no_functional_tests=0
 certain_tests=0
 
 
@@ -91,12 +101,14 @@ function run_tests {
 
   # Enable all tests if none was specified skipping all explicitly disabled tests.
   if [[ $flake8_checks -eq 0 && \
+      $functional_tests -eq 0 && \
       $integration_tests -eq 0 && \
       $unit_tests -eq 0 ]]; then
 
     if [ $no_flake8_checks -ne 1 ];  then flake8_checks=1;  fi
     if [ $no_unit_tests -ne 1 ];  then unit_tests=1;  fi
     if [ $no_integration_tests -ne 1 ]; then integration_tests=1; fi
+    if [ $no_functional_tests -ne 1 ]; then functional_tests=1; fi
   fi
 
   # Run all enabled tests
@@ -110,6 +122,10 @@ function run_tests {
 
   if [ $integration_tests -eq 1 ]; then
     run_integration_tests || errors+=" integration_tests"
+  fi
+
+  if [ $functional_tests -eq 1 ]; then
+    run_functional_tests || errors+=" functional_tests"
   fi
 
   # print failed tests
@@ -168,6 +184,97 @@ function run_unit_tests {
   return $result
 }
 
+
+function create_ostf_conf {
+  local SERVER_PORT=$1
+  local config_path=$2
+  local artifacts_path=$3
+  cat > $config_path <<EOL
+[adapter]
+server_port = $SERVER_PORT
+dbpath = postgresql+psycopg2://ostf:ostf@localhost/ostf
+log_file = $artifacts_path/ostf.log
+EOL
+}
+
+
+function run_server {
+  local SERVER_PORT=$1
+  local SERVER_STDOUT=$2
+  local SERVER_SETTINGS=$3
+
+  local RUN_SERVER="\
+      ostf-server \
+      --debug
+      --debug_tests=$ROOT/fuel_plugin/testing/fixture/dummy_tests
+      --config-file $SERVER_SETTINGS"
+
+  # kill old server instance if exists
+  local pid=`lsof -ti tcp:$SERVER_PORT`
+  if [ -n "$pid" ]; then
+    kill $pid
+    sleep 5
+  fi
+
+  # run new server instance
+  tox -evenv -- $RUN_SERVER >> $SERVER_STDOUT 2>&1 &
+
+  # wait for server availability
+  which curl >> /dev/null
+
+  if [ $? -eq 0 ]; then
+    # we wait for 0.1s, so there are 10 attempts in 1s
+    local num_retries=$[$OSTF_SERVER_WAIT_TIME * 10]
+
+    for i in $(seq 1 $num_retries); do
+      local http_code=`curl -s -w %{http_code} -o /dev/null http://127.0.0.1:$SERVER_PORT`
+      if [ "$http_code" == "200" ]; then break; fi
+      sleep 0.1
+    done
+  else
+    sleep 5
+  fi
+
+  pid=`lsof -ti tcp:$SERVER_PORT`
+  local server_launched=$?
+  echo $pid
+  return $server_launched
+}
+
+function run_functional_tests {
+  echo "Starting functional tests"
+
+  local OSTF_SERVER_PORT=8777
+  local pid=0
+  local server_log=`mktemp /tmp/test_functional_ostf_server.XXXX`
+  local artifacts=$ARTIFACTS/functional
+  local config=$artifacts/ostf.conf
+  mkdir -p $artifacts
+
+  create_ostf_conf $OSTF_SERVER_PORT $config $artifacts
+  pid=`run_server $OSTF_SERVER_PORT $server_log $config`
+
+  local TESTS="$ROOT/fuel_plugin/testing/tests/functional"
+  local options="-vv $testropts --xunit-file $INTEGRATION_XUNIT"
+  local result=0
+
+  if [ $# -ne 0 ]; then
+    TESTS=$@
+  fi
+
+  if [ $pid -ne 0 ]; then
+    # run tests
+    tox -epy26 -- $options $TESTS  || result=1
+
+    kill $pid
+    wait $pid 2> /dev/null
+  else
+    cat $server_log
+    result=1
+  fi
+
+  return $result
+}
 
 function run_integration_tests {
   echo "Starting integration tests"
