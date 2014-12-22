@@ -65,7 +65,8 @@ testropts="--with-timer --timer-warning=10 --timer-ok=2 --timer-top-n=10"
 # customizable options
 ARTIFACTS=${ARTIFACTS:-`pwd`/test_run}
 INTEGRATION_XUNIT=${INTEGRATION_XUNIT:-"$ROOT/integration.xml"}
-OSTF_SERVER_WAIT_TIME=10
+OSTF_SERVER_PORT=${OSRF_SERVER_PORT:-8777}
+OSTF_SERVER_WAIT_TIME=${OSTF_SERVER_WAIT_TIME:-10}
 UNIT_XUNIT=${UNIT_XUNIT:-"$ROOT/unittests.xml"}
 
 mkdir -p $ARTIFACTS
@@ -186,9 +187,9 @@ function run_unit_tests {
 
 
 function create_ostf_conf {
-  local SERVER_PORT=$1
-  local config_path=$2
-  local artifacts_path=$3
+  local config_path=$1
+  local artifacts_path=$2
+  local SERVER_PORT=${3:-$OSTF_SERVER_PORT}
   cat > $config_path <<EOL
 [adapter]
 server_port = $SERVER_PORT
@@ -199,9 +200,9 @@ EOL
 
 
 function run_server {
-  local SERVER_PORT=$1
-  local SERVER_STDOUT=$2
-  local SERVER_SETTINGS=$3
+  local SERVER_STDOUT=$1
+  local SERVER_SETTINGS=$2
+  local SERVER_PORT=${3:-$OSTF_SERVER_PORT}
 
   local RUN_SERVER="\
       ostf-server \
@@ -241,18 +242,30 @@ function run_server {
   return $server_launched
 }
 
+
+function syncdb {
+  local SERVER_SETTINGS=$1
+  local RUN_SYNCDB="\
+      ostf-server \
+      --debug
+      --after-initialization-environment-hook
+      --config-file $SERVER_SETTINGS"
+
+      tox -evenv -- $RUN_SYNCDB > /dev/null
+}
+
+
 function run_functional_tests {
   echo "Starting functional tests"
 
-  local OSTF_SERVER_PORT=8777
   local pid=0
   local server_log=`mktemp /tmp/test_functional_ostf_server.XXXX`
   local artifacts=$ARTIFACTS/functional
   local config=$artifacts/ostf.conf
   mkdir -p $artifacts
 
-  create_ostf_conf $OSTF_SERVER_PORT $config $artifacts
-  pid=`run_server $OSTF_SERVER_PORT $server_log $config`
+  create_ostf_conf $config $artifacts
+  pid=`run_server $server_log $config`
 
   local TESTS="$ROOT/fuel_plugin/testing/tests/functional"
   local options="-vv $testropts --xunit-file $INTEGRATION_XUNIT"
@@ -282,10 +295,17 @@ function run_integration_tests {
   local TESTS="$ROOT/fuel_plugin/testing/tests/integration"
   local options="-vv $testropts --xunit-file $INTEGRATION_XUNIT"
   local result=0
+  local artifacts=$ARTIFACTS/integration
+  local config=$artifacts/ostf.conf
+  mkdir -p $artifacts
 
   if [ $# -ne 0 ]; then
     TESTS=$@
   fi
+
+  create_ostf_conf $config $artifacts
+
+  syncdb $config
 
   # run tests
   tox -epy26 -- $options $TESTS  || result=1
