@@ -139,6 +139,9 @@ class TestrunsController(BaseRestController):
         # Validate testsets from request
         test_sets = set([testset.id for testset in request.
                         session.query(models.TestSet).all()])
+        print nedded_testsets
+        print test_sets
+        print nedded_testsets - test_sets
         if nedded_testsets - test_sets:
             # TODO(prmtl): error message needed
             abort(400)

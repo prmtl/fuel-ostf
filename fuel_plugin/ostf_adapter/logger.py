@@ -35,6 +35,7 @@ class ResultsLogger(object):
         logger = logging.getLogger('ostf-results-log-{0}-{1}'.format(
             self.cluster_id, self.testset))
 
+        return logger
         if not logger.handlers:
             log_dir = '/var/log/ostf'
             log_file = os.path.join(log_dir, self.filename)

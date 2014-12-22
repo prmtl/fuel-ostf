@@ -254,18 +254,55 @@ function syncdb {
       tox -evenv -- $RUN_SYNCDB > /dev/null
 }
 
+function run_fake_nailgun {
+  local SERVER_PORT=8000
+
+  # kill old server instance if exists
+  local pid=`lsof -ti tcp:$SERVER_PORT`
+  if [ -n "$pid" ]; then
+    kill $pid
+    sleep 5
+  fi
+
+  # run new server instance
+  tox -enailgun > /dev/null 2>&1 &
+
+  # wait for server availability
+  which curl >> /dev/null
+
+  if [ $? -eq 0 ]; then
+    # we wait for 0.1s, so there are 10 attempts in 1s
+    local num_retries=$[$OSTF_SERVER_WAIT_TIME * 10]
+
+    for i in $(seq 1 $num_retries); do
+      local http_code=`curl -s -w %{http_code} -o /dev/null http://127.0.0.1:$SERVER_PORT`
+      if [ "$http_code" == "200" ]; then break; fi
+      sleep 0.1
+    done
+  else
+    sleep 5
+  fi
+
+  pid=`lsof -ti tcp:$SERVER_PORT`
+  local server_launched=$?
+  echo $pid
+  return $server_launched
+}
 
 function run_functional_tests {
   echo "Starting functional tests"
 
-  local pid=0
+  local server_pid=0
+  local nailgun_pid=0
   local server_log=`mktemp /tmp/test_functional_ostf_server.XXXX`
   local artifacts=$ARTIFACTS/functional
   local config=$artifacts/ostf.conf
   mkdir -p $artifacts
 
   create_ostf_conf $config $artifacts
-  pid=`run_server $server_log $config`
+  server_pid=`run_server $server_log $config`
+
+  nailgun_pid=`run_fake_nailgun`
 
   local TESTS="$ROOT/fuel_plugin/testing/tests/functional"
   local options="-vv $testropts --xunit-file $INTEGRATION_XUNIT"
@@ -275,16 +312,25 @@ function run_functional_tests {
     TESTS=$@
   fi
 
-  if [ $pid -ne 0 ]; then
+  if [[ $server_pid -ne 0 && \
+    $nailgun_pid -ne 0 ]]; then
+
     # run tests
     tox -epy26 -- $options $TESTS  || result=1
 
-    kill $pid
-    wait $pid 2> /dev/null
-  else
+
+  elif [[ $server_pid -eq 0 ]]; then
     cat $server_log
     result=1
+  elif [[ $nailgun_pid -eq 0 ]]; then
+    echo "Fake Nailgun services has issues when starting"
   fi
+  # kill ostf server
+  kill $server_pid 2> /dev/null
+  wait $server_pid 2> /dev/null
+  # kill fake nailgun server
+  kill $nailgun_pid 2> /dev/null
+  wait $nailgun_pid 2> /dev/null
 
   return $result
 }
