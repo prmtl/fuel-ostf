@@ -123,9 +123,9 @@ class BaseIntegrationTest(BaseUnitTest):
 
     @classmethod
     def setUpClass(cls):
+        config.init_config([])
         # db connection
-        # TODO(prmtl): get from config so it will be dynamic
-        cls.dbpath = 'postgresql+psycopg2://ostf:ostf@localhost/ostf'
+        cls.dbpath = config.cfg.CONF.adapter.dbpath
         cls.Session = sessionmaker()
         cls.engine = create_engine(cls.dbpath)
 
@@ -140,7 +140,6 @@ class BaseIntegrationTest(BaseUnitTest):
 
     def setUp(self):
         # orm session wrapping
-        config.init_config([])
         self.connection = self.engine.connect()
         self.trans = self.connection.begin()
 
